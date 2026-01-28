@@ -10,12 +10,37 @@ QueryExecutor connect() {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'ot.sqlite'));
 
-    // Copy from assets if it doesn't exist
-    if (!await file.exists()) {
-      final data = await rootBundle.load('assets/database/ot.sqlite');
-      final bytes = data.buffer.asUint8List();
-      await file.writeAsBytes(bytes);
+    // DEBUG PRINT 1: Where are we looking?
+    print("📂 Database path: ${file.path}");
+
+    // Check if file exists
+    if (await file.exists()) {
+      final size = await file.length();
+      print("ℹ️ File exists. Size: $size bytes");
+      
+      // CRITICAL FIX: If file is 0 bytes (empty), delete it so we can copy fresh.
+      if (size == 0) {
+        print("⚠️ File is empty. Deleting...");
+        await file.delete();
+      }
     }
+
+    // Copy Logic
+    if (!await file.exists()) {
+      print("⚠️ Copying database from assets...");
+      try {
+        // Load from asset bundle
+        final data = await rootBundle.load('assets/database/ot.sqlite');
+        // Convert to bytes
+        final bytes = data.buffer.asUint8List();
+        // Write to storage
+        await file.writeAsBytes(bytes, flush: true);
+        print("✅ Database copied! New Size: ${await file.length()} bytes");
+      } catch (e) {
+        print("❌ ERROR copying database: $e");
+      }
+    }
+    
     return NativeDatabase(file);
   });
 }

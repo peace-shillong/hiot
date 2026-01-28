@@ -14,9 +14,15 @@ QueryExecutor connect() {
       sqlite3Uri: Uri.parse('sqlite3.wasm'),
       driftWorkerUri: Uri.parse('drift_worker.js'), // Optional: for background thread
       initializeDatabase: () async {
-        // 3. Populate from asset on first run (Web specific)
-        final data = await rootBundle.load('assets/database/ot.sqlite');
-        return data.buffer.asUint8List();
+        // print("⚠️ Web: Loading database from assets...");
+        try {
+          final data = await rootBundle.load('assets/database/ot.sqlite');
+          // print("✅ Web: Asset loaded. Size: ${data.lengthInBytes}");
+          return data.buffer.asUint8List();
+        } catch (e) {
+          // print("❌ Web: Error loading asset: $e");
+          rethrow;
+        }
       },
     );
     

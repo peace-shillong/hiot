@@ -12,7 +12,6 @@ class SelectionForm extends StatefulWidget {
 }
 
 class _SelectionFormState extends State<SelectionForm> {
-  // Temporary state for the dropdowns before user clicks "View"
   String? tempBook;
   int tempChapter = 1;
   int tempVerse = 1;
@@ -20,82 +19,126 @@ class _SelectionFormState extends State<SelectionForm> {
   @override
   void initState() {
     super.initState();
-    // Load books immediately
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<BibleProvider>().loadBooks();
-      // Initialize temp values from current provider state
-      final provider = context.read<BibleProvider>();
-      tempBook = provider.selectedBook;
-      tempChapter = provider.selectedChapter;
-      tempVerse = provider.selectedVerse;
+      // Trigger the initial load chain
+      context.read<BibleProvider>().loadBooks().then((_) {
+        // Sync local state with provider defaults after load
+        final provider = context.read<BibleProvider>();
+        if (mounted && provider.books.isNotEmpty) {
+           setState(() {
+             tempBook = provider.selectedBook;
+             tempChapter = provider.selectedChapter;
+             tempVerse = provider.selectedVerse;
+           });
+        }
+      });
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Watch the provider for changes in available counts (chapters/verses)
     final provider = context.watch<BibleProvider>();
+    print("🎨 UI Building with Provider Instance: ${provider.hashCode}. Book count: ${provider.books.length}");
     
-    // Default to "Genesis" if books aren't loaded yet
-    final currentBook = tempBook ?? (provider.books.isNotEmpty ? provider.books.first : "Genesis");
+    // 1. Handle Loading State gracefully
+    // Only show full loader if we have absolutely zero books
+    if (provider.isLoading && provider.books.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
+    // Safety: If load failed or empty
+    if (provider.books.isEmpty) {
+      return const Center(child: Text("No books found in database."));
+    }
+
+    // Ensure tempBook is valid
+    final currentBook = tempBook ?? provider.books.first;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 1. Book Selector
+        // --- BOOK DROPDOWN ---
         DropdownButtonFormField<String>(
-          initialValue: provider.books.contains(currentBook) ? currentBook : null,
+          value: provider.books.contains(currentBook) ? currentBook : null,
           decoration: const InputDecoration(labelText: "Select Book", border: OutlineInputBorder()),
           items: provider.books.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
-          onChanged: (val) {
-            setState(() {
-              tempBook = val;
-              tempChapter = 1; // Reset chapter when book changes
-              tempVerse = 1;
-            });
+          onChanged: (newBook) {
+            if (newBook != null && newBook != tempBook) {
+              setState(() {
+                tempBook = newBook;
+                tempChapter = 1; // Reset to safe default immediately
+                tempVerse = 1;
+              });
+              // Trigger cascading load for chapters
+              provider.loadChapters(newBook).then((_) {
+                 // Update tempChapter to the first available one from the new list
+                 if (mounted) {
+                   setState(() {
+                     tempChapter = provider.availableChapters.first;
+                   });
+                 }
+              });
+            }
           },
         ),
         const SizedBox(height: 16),
 
-        // 2. Chapter & Verse Row
         Row(
           children: [
-            // Chapter Selector
+            // --- CHAPTER DROPDOWN ---
             Expanded(
               child: DropdownButtonFormField<int>(
-                initialValue: tempChapter,
+                // Ensure value exists in the new list, else default to first
+                value: provider.availableChapters.contains(tempChapter) 
+                    ? tempChapter 
+                    : provider.availableChapters.first,
                 decoration: const InputDecoration(labelText: "Chapter", border: OutlineInputBorder()),
-                // Generating 150 chapters for safety (In real app, query DB for max chapters)
-                items: List.generate(150, (index) => index + 1)
-                    .map((c) => DropdownMenuItem(value: c, child: Text("$c")))
-                    .toList(),
-                onChanged: (val) => setState(() => tempChapter = val!),
+                // Map from the ACTUAL LIST of chapters, not a generated range
+                items: provider.availableChapters.map((c) => DropdownMenuItem(value: c, child: Text("$c"))).toList(),
+                onChanged: (newChapter) {
+                  if (newChapter != null) {
+                    setState(() {
+                      tempChapter = newChapter;
+                      tempVerse = 1;
+                    });
+                    // Trigger cascading load for verses
+                    provider.loadVerses(currentBook, newChapter).then((_) {
+                        if (mounted) {
+                           setState(() {
+                             tempVerse = provider.availableVerses.first;
+                           });
+                        }
+                    });
+                  }
+                },
               ),
             ),
             const SizedBox(width: 16),
-            // Verse Selector
+
+            // --- VERSE DROPDOWN ---
             Expanded(
               child: DropdownButtonFormField<int>(
-                initialValue: tempVerse,
+                value: provider.availableVerses.contains(tempVerse) 
+                    ? tempVerse 
+                    : provider.availableVerses.first,
                 decoration: const InputDecoration(labelText: "Verse", border: OutlineInputBorder()),
-                items: List.generate(176, (index) => index + 1)
-                    .map((v) => DropdownMenuItem(value: v, child: Text("$v")))
-                    .toList(),
-                onChanged: (val) => setState(() => tempVerse = val!),
+                items: provider.availableVerses.map((v) => DropdownMenuItem(value: v, child: Text("$v"))).toList(),
+                onChanged: (newVerse) {
+                  if (newVerse != null) {
+                    setState(() => tempVerse = newVerse);
+                  }
+                },
               ),
             ),
           ],
         ),
         const SizedBox(height: 24),
 
-        // 3. View Button
         ElevatedButton.icon(
           onPressed: () {
-            // Commit changes to Provider
-            context.read<BibleProvider>().updateSelection(
-                  tempBook!,
-                  tempChapter,
-                  tempVerse,
-                );
+            // Commit to provider
+            provider.updateSelection(currentBook, tempChapter, tempVerse);
             widget.onViewPressed();
           },
           icon: const Icon(Icons.visibility),

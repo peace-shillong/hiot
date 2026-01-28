@@ -18,7 +18,15 @@ void main() async {
         // BibleProvider needs access to SettingsProvider to load initial state
         ChangeNotifierProxyProvider<SettingsProvider, BibleProvider>(
           create: (context) => BibleProvider(database, null),
-          update: (context, settings, previous) => BibleProvider(database, settings),
+          update: (context, settings, previous) {
+            // Check if we already have a provider
+            final provider = previous ?? BibleProvider(database, settings);
+            
+            // Just update its settings reference
+            provider.updateSettings(settings); 
+            
+            return provider;
+          },
         ),
       ],
       child: const MyApp(),

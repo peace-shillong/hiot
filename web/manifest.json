@@ -1,11 +1,11 @@
 {
-    "name": "hiot",
-    "short_name": "hiot",
+    "name": "Hebriew Interlinear OT",
+    "short_name": "HIOT",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "A Hebriew Interlinear Old Testament App",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

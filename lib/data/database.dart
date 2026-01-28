@@ -39,6 +39,22 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 1;
 
+  // ADD THIS BLOCK
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (Migrator m) async {
+        // INTENTIONALLY EMPTY
+        // Since the database is pre-populated, we don't need Drift to create tables.
+        // If we let it run, it might crash trying to create tables that already exist.
+      },
+      beforeOpen: (details) async {
+        // Good practice to enable foreign keys
+        await customStatement('PRAGMA foreign_keys = ON');
+      },
+    );
+  }
+
   // Query to get words for a specific verse
   Future<List<ContentData>> getVerse(String bookName, int chapter, int verse) {
     return (select(content)
@@ -55,4 +71,43 @@ class AppDatabase extends _$AppDatabase {
     final lookupId = strongsNumber.startsWith('H') ? strongsNumber : 'H$strongsNumber';
     return (select(strongs)..where((t) => t.id.equals(lookupId))).getSingleOrNull();
   }
+
+  // Inside AppDatabase class
+
+  // 1. Get All Books (Already likely exists, but ensuring it matches)
+  Future<List<String>> getAllBooks() async {
+    final result = await customSelect(
+      'SELECT DISTINCT name FROM books ORDER BY nr ASC',
+      readsFrom: {books},
+    ).get();
+    return result.map((row) => row.read<String>('name')).toList();
+  }
+
+  // 2. Get Distinct Chapters for a Book
+  Future<List<int>> getChaptersForBook(String bookName) async {
+    // Logic: Select distinct chapter from content where book = bookName
+    final query = selectOnly(content, distinct: true)
+      ..addColumns([content.chapter])
+      ..where(content.book.equals(bookName))
+      ..orderBy([OrderingTerm(expression: content.chapter, mode: OrderingMode.asc)]);
+
+    final result = await query.get();
+    
+    // Convert rows to List<int>
+    return result.map((row) => row.read(content.chapter)!).toList();
+  }
+
+  // 3. Get Distinct Verses for a Book + Chapter
+  Future<List<int>> getVersesForChapter(String bookName, int chapterNum) async {
+    // Logic: Select distinct verse from content where book = bookName AND chapter = chapterNum
+    final query = selectOnly(content, distinct: true)
+      ..addColumns([content.verse])
+      ..where(content.book.equals(bookName) & content.chapter.equals(chapterNum))
+      ..orderBy([OrderingTerm(expression: content.verse, mode: OrderingMode.asc)]);
+
+    final result = await query.get();
+    
+    return result.map((row) => row.read(content.verse)!).toList();
+  }
+
 }
