@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hiot/ui/widgets/modern_selection_grid.dart';
 import 'selection_form.dart';
 
 class SelectionSidebar extends StatelessWidget {
@@ -26,11 +27,8 @@ class SelectionSidebar extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           // reuse the exact same form as mobile
-          SelectionForm(
-            onViewPressed: () {
-              // On Web, we do nothing here.
-              // The form already updated the Provider, which updates the DisplayPane automatically.
-            },
+          ModernSelectionGrid(onSelectionComplete: () {  },
+            
           ),
           const Spacer(),
           const Divider(),

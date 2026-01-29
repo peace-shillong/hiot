@@ -7,7 +7,7 @@ import '../../data/database.dart';
 class InterlinearWord extends StatelessWidget {
   final ContentData wordData;
 
-  const InterlinearWord({super.key, required this.wordData});
+  const InterlinearWord(ContentData word, {super.key, required this.wordData});
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +49,7 @@ class InterlinearWord extends StatelessWidget {
               wordData.strongs,
               style: const TextStyle(
                 color: Colors.teal,
-                fontSize: 12,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 decoration: TextDecoration.underline,
               ),

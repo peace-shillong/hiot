@@ -26,7 +26,10 @@ class VerseDisplayPane extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 16.0),
             child: Text(
               "${provider.selectedBook} ${provider.selectedChapter}:${provider.selectedVerse}",
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -34,6 +37,8 @@ class VerseDisplayPane extends StatelessWidget {
           // Main Content: The Flowing Interlinear Text
           Expanded(
             child: SingleChildScrollView(
+              // FIX 1: Add bottom padding for scrolling space
+              padding: const EdgeInsets.only(bottom: 100.0),
               child: Directionality(
                 // FORCE Right-to-Left layout for the Wrap flow
                 textDirection: TextDirection.rtl, 
@@ -43,7 +48,7 @@ class VerseDisplayPane extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   alignment: WrapAlignment.start,
                   children: words.map((wordData) {
-                    return InterlinearWord(wordData: wordData);
+                    return InterlinearWord(wordData,wordData: wordData);
                   }).toList(),
                 ),
               ),
