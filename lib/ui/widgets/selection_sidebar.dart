@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:hiot/ui/widgets/modern_selection_grid.dart';
-import 'selection_form.dart';
+import 'modern_selection_grid.dart';
 
 class SelectionSidebar extends StatelessWidget {
   const SelectionSidebar({super.key});
@@ -9,34 +8,47 @@ class SelectionSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.white,
         border: Border(
           right: BorderSide(color: Colors.grey.shade300, width: 1),
         ),
       ),
-      padding: const EdgeInsets.all(24.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            "Passage Selection",
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.teal,
-              fontWeight: FontWeight.bold,
+          // 1. Header Area
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 16), // Top padding for visual balance
+            color: Colors.teal.shade50,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Bible Books",
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.teal,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Select a book to read, once chapter and verse is selected, the content will display automatically.",
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.teal.shade700,
+                      ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 24),
-          // reuse the exact same form as mobile
-          ModernSelectionGrid(onSelectionComplete: () {  },
-            
-          ),
-          const Spacer(),
-          const Divider(),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: Text(
-              "Hebrew Interlinear Old Testament",
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+          
+          // 2. The Grid (Takes remaining space)
+          // We use Flexible to ensure it fills the space but respects boundaries
+          Flexible(
+            fit: FlexFit.tight,
+            child: ModernSelectionGrid(
+              onSelectionComplete: () {
+                // Empty for Web (Auto-updates via Provider)
+              },
             ),
           ),
         ],

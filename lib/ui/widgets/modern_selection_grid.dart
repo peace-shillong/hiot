@@ -17,13 +17,10 @@ class _ModernSelectionGridState extends State<ModernSelectionGrid> with TickerPr
   @override
   void initState() {
     super.initState();
-    // 3 Tabs: Book, Chapter, Verse
     _tabController = TabController(length: 3, vsync: this);
 
-    // ✅ FIX: Load books immediately when this sheet opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<BibleProvider>();
-      // Only load if empty to prevent unnecessary reloading
       if (provider.books.isEmpty) {
         provider.loadBooks();
       }
@@ -40,7 +37,6 @@ class _ModernSelectionGridState extends State<ModernSelectionGrid> with TickerPr
     if (_tabController.index < 2) {
       _tabController.animateTo(_tabController.index + 1);
     } else {
-      // If we are on the last tab (Verse) and select one, we are done.
       widget.onSelectionComplete();
     }
   }
@@ -50,7 +46,7 @@ class _ModernSelectionGridState extends State<ModernSelectionGrid> with TickerPr
     final provider = context.watch<BibleProvider>();
 
     return Column(
-      mainAxisSize: MainAxisSize.min, // Important for BottomSheet
+      mainAxisSize: MainAxisSize.min,
       children: [
         // 1. The Tabs
         TabBar(
@@ -65,27 +61,27 @@ class _ModernSelectionGridState extends State<ModernSelectionGrid> with TickerPr
           ],
         ),
         
-        // 2. The Views
-        SizedBox(
-          height: 400, // Fixed height for the grid area
+        // 2. The Views (CHANGED: Use Expanded instead of SizedBox)
+        // This forces the grid to take whatever space is left in the parent
+        Expanded( 
           child: TabBarView(
             controller: _tabController,
             children: [
-              // --- BOOK SELECTION (LIST) ---
+              // --- BOOK SELECTION ---
               _buildBookList(provider),
 
-              // --- CHAPTER SELECTION (GRID) ---
+              // --- CHAPTER SELECTION ---
               _buildGrid(
                 items: provider.availableChapters,
                 selectedItem: provider.selectedChapter,
                 onTap: (val) {
-                  provider.updateSelection(provider.selectedBook, val, 1); // Reset verse to 1
-                  provider.loadVerses(provider.selectedBook, val); // Load verses for next step
+                  provider.updateSelection(provider.selectedBook, val, 1);
+                  provider.loadVerses(provider.selectedBook, val); 
                   _nextTab();
                 },
               ),
 
-              // --- VERSE SELECTION (GRID) ---
+              // --- VERSE SELECTION ---
               _buildGrid(
                 items: provider.availableVerses,
                 selectedItem: provider.selectedVerse,
@@ -101,10 +97,12 @@ class _ModernSelectionGridState extends State<ModernSelectionGrid> with TickerPr
     );
   }
 
+  // ... _buildBookList and _buildGrid remain the same ...
   Widget _buildBookList(BibleProvider provider) {
-    if (provider.books.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (provider.isLoading && provider.books.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-    // Handle empty state (e.g. database error)
     if (provider.books.isEmpty) {
       return Center(
         child: Column(
@@ -137,11 +135,8 @@ class _ModernSelectionGridState extends State<ModernSelectionGrid> with TickerPr
           ),
           trailing: isSelected ? const Icon(Icons.check, color: Colors.teal) : null,
           onTap: () {
-            // Update Book, Reset Chapter/Verse to 1
             provider.updateSelection(book, 1, 1);
-            // Load Chapters for this book
             provider.loadChapters(book); 
-            // Move to next tab
             _nextTab();
           },
         );
@@ -159,7 +154,7 @@ class _ModernSelectionGridState extends State<ModernSelectionGrid> with TickerPr
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5, // 5 buttons per row
+        crossAxisCount: 5,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
