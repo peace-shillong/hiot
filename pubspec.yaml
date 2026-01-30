@@ -53,6 +53,18 @@ dev_dependencies:
     sdk: flutter
   drift_dev: ^2.14.0
   build_runner: ^2.4.7
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/icon.png"
+  min_sdk_android: 21 # android min sdk min:16, default 21
+  web:
+    generate: true
+    image_path: "assets/images/icon.png"
+    background_color: "#hex_code" # Optional: e.g., "#FFFFFF"
+    theme_color: "#hex_code"
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
