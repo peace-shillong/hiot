@@ -25,11 +25,11 @@ class _SelectionFormState extends State<SelectionForm> {
         // Sync local state with provider defaults after load
         final provider = context.read<BibleProvider>();
         if (mounted && provider.books.isNotEmpty) {
-           setState(() {
-             tempBook = provider.selectedBook;
-             tempChapter = provider.selectedChapter;
-             tempVerse = provider.selectedVerse;
-           });
+          setState(() {
+            tempBook = provider.selectedBook;
+            tempChapter = provider.selectedChapter;
+            tempVerse = provider.selectedVerse;
+          });
         }
       });
     });
@@ -39,14 +39,16 @@ class _SelectionFormState extends State<SelectionForm> {
   Widget build(BuildContext context) {
     // Watch the provider for changes in available counts (chapters/verses)
     final provider = context.watch<BibleProvider>();
-    print("🎨 UI Building with Provider Instance: ${provider.hashCode}. Book count: ${provider.books.length}");
-    
+    print(
+      "🎨 UI Building with Provider Instance: ${provider.hashCode}. Book count: ${provider.books.length}",
+    );
+
     // 1. Handle Loading State gracefully
     // Only show full loader if we have absolutely zero books
     if (provider.isLoading && provider.books.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     // Safety: If load failed or empty
     if (provider.books.isEmpty) {
       return const Center(child: Text("No books found in database."));
@@ -60,9 +62,16 @@ class _SelectionFormState extends State<SelectionForm> {
       children: [
         // --- BOOK DROPDOWN ---
         DropdownButtonFormField<String>(
-          value: provider.books.contains(currentBook) ? currentBook : null,
-          decoration: const InputDecoration(labelText: "Select Book", border: OutlineInputBorder()),
-          items: provider.books.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+          initialValue: provider.books.contains(currentBook)
+              ? currentBook
+              : null,
+          decoration: const InputDecoration(
+            labelText: "Select Book",
+            border: OutlineInputBorder(),
+          ),
+          items: provider.books
+              .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+              .toList(),
           onChanged: (newBook) {
             if (newBook != null && newBook != tempBook) {
               setState(() {
@@ -72,12 +81,12 @@ class _SelectionFormState extends State<SelectionForm> {
               });
               // Trigger cascading load for chapters
               provider.loadChapters(newBook).then((_) {
-                 // Update tempChapter to the first available one from the new list
-                 if (mounted) {
-                   setState(() {
-                     tempChapter = provider.availableChapters.first;
-                   });
-                 }
+                // Update tempChapter to the first available one from the new list
+                if (mounted) {
+                  setState(() {
+                    tempChapter = provider.availableChapters.first;
+                  });
+                }
               });
             }
           },
@@ -90,12 +99,17 @@ class _SelectionFormState extends State<SelectionForm> {
             Expanded(
               child: DropdownButtonFormField<int>(
                 // Ensure value exists in the new list, else default to first
-                value: provider.availableChapters.contains(tempChapter) 
-                    ? tempChapter 
+                initialValue: provider.availableChapters.contains(tempChapter)
+                    ? tempChapter
                     : provider.availableChapters.first,
-                decoration: const InputDecoration(labelText: "Chapter", border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: "Chapter",
+                  border: OutlineInputBorder(),
+                ),
                 // Map from the ACTUAL LIST of chapters, not a generated range
-                items: provider.availableChapters.map((c) => DropdownMenuItem(value: c, child: Text("$c"))).toList(),
+                items: provider.availableChapters
+                    .map((c) => DropdownMenuItem(value: c, child: Text("$c")))
+                    .toList(),
                 onChanged: (newChapter) {
                   if (newChapter != null) {
                     setState(() {
@@ -104,11 +118,11 @@ class _SelectionFormState extends State<SelectionForm> {
                     });
                     // Trigger cascading load for verses
                     provider.loadVerses(currentBook, newChapter).then((_) {
-                        if (mounted) {
-                           setState(() {
-                             tempVerse = provider.availableVerses.first;
-                           });
-                        }
+                      if (mounted) {
+                        setState(() {
+                          tempVerse = provider.availableVerses.first;
+                        });
+                      }
                     });
                   }
                 },
@@ -119,11 +133,16 @@ class _SelectionFormState extends State<SelectionForm> {
             // --- VERSE DROPDOWN ---
             Expanded(
               child: DropdownButtonFormField<int>(
-                value: provider.availableVerses.contains(tempVerse) 
-                    ? tempVerse 
+                initialValue: provider.availableVerses.contains(tempVerse)
+                    ? tempVerse
                     : provider.availableVerses.first,
-                decoration: const InputDecoration(labelText: "Verse", border: OutlineInputBorder()),
-                items: provider.availableVerses.map((v) => DropdownMenuItem(value: v, child: Text("$v"))).toList(),
+                decoration: const InputDecoration(
+                  labelText: "Verse",
+                  border: OutlineInputBorder(),
+                ),
+                items: provider.availableVerses
+                    .map((v) => DropdownMenuItem(value: v, child: Text("$v")))
+                    .toList(),
                 onChanged: (newVerse) {
                   if (newVerse != null) {
                     setState(() => tempVerse = newVerse);
