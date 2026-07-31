@@ -21,6 +21,50 @@ class _MobileDisplayScreenState extends State<MobileDisplayScreen> {
   // 1. Create Controller
   final ScreenshotController _screenshotController = ScreenshotController();
 
+  // Infinite-loop trick: the PageView always has exactly 3 pages
+  // (previous / current / next). We keep it centered on index 1 and, once a
+  // swipe settles on 0 or 2, commit that verse to BibleProvider and jump
+  // straight back to the center — instead of recreating the controller (and
+  // therefore its scroll position) on every rebuild, which is what caused
+  // the previous verse to linger until the drag was already past the
+  // halfway point and only then snap to the new one.
+  late final PageController _pageController;
+  static const int _centerPage = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _centerPage);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onPageChanged(int index) async {
+    if (index == _centerPage) return;
+
+    final provider = context.read<BibleProvider>();
+    final message = index > _centerPage
+        ? await provider.nextVerse()
+        : await provider.previousVerse();
+
+    if (!mounted) return;
+    _pageController.jumpToPage(_centerPage);
+
+    if (message != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<BibleProvider>();
@@ -32,7 +76,7 @@ class _MobileDisplayScreenState extends State<MobileDisplayScreen> {
           IconButton(
             icon: const Icon(Icons.share),
             // 2. Attach Share Logic
-            onPressed: _shareImage, 
+            onPressed: _shareImage,
           )
         ],
       ),
@@ -41,38 +85,36 @@ class _MobileDisplayScreenState extends State<MobileDisplayScreen> {
         controller: _screenshotController,
         // We use a white container background to ensure captured image isn't transparent
         child: Container(
-          color: Colors.white, 
+          color: Colors.white,
           child: PageView.builder(
-            controller: PageController(initialPage: provider.selectedVerse),
-            // Inside build() -> PageView.builder -> onPageChanged:
-
-            onPageChanged: (index) async {
-              final provider = context.read<BibleProvider>();
-              String? message;
-
-              if (index > provider.selectedVerse) {
-                message = await provider.nextVerse();
-              } else {
-                message = await provider.previousVerse();
-              }
-
-              // If a message was returned, show it and force the page back
-              if (message != null && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(message),
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-                // Important: If we hit the wall, the PageView might have visually slid 
-                // to a "blank" next page. We need to force it back to the current verse.
-                // (However, since we are rebuilding the widget with the SAME verse, 
-                // Flutter usually handles the snap back automatically).
-              }
-            },
+            controller: _pageController,
+            itemCount: 3,
+            onPageChanged: _onPageChanged,
             itemBuilder: (context, index) {
-              return const VerseDisplayPane();
+              if (index < _centerPage) {
+                final coords = provider.previousCoords;
+                return VerseDisplayPane(
+                  words: provider.previousVerseWords,
+                  book: coords?.book,
+                  chapter: coords?.chapter,
+                  verse: coords?.verse,
+                );
+              }
+              if (index > _centerPage) {
+                final coords = provider.nextCoords;
+                return VerseDisplayPane(
+                  words: provider.nextVerseWords,
+                  book: coords?.book,
+                  chapter: coords?.chapter,
+                  verse: coords?.verse,
+                );
+              }
+              return VerseDisplayPane(
+                words: provider.currentVerseWords,
+                book: provider.selectedBook,
+                chapter: provider.selectedChapter,
+                verse: provider.selectedVerse,
+              );
             },
           ),
         ),

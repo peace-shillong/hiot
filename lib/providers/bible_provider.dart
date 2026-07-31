@@ -10,6 +10,10 @@ class BibleProvider extends ChangeNotifier {
   int _selectedChapter = 1;
   int _selectedVerse = 1;
   List<ContentData> _currentVerseWords = [];
+  List<ContentData> _nextVerseWords = [];
+  List<ContentData> _previousVerseWords = [];
+  ({String book, int chapter, int verse})? _nextCoords;
+  ({String book, int chapter, int verse})? _previousCoords;
 
   // NEW: State for Dropdowns
   List<String> _books = [];
@@ -117,21 +121,50 @@ class BibleProvider extends ChangeNotifier {
   int get selectedChapter => _selectedChapter;
   int get selectedVerse => _selectedVerse;
   List<ContentData> get currentVerseWords => _currentVerseWords;
+  // Pre-fetched neighbor content, so a swipe-in-progress can show the real
+  // adjacent verse instead of a stale copy of the current one.
+  List<ContentData> get nextVerseWords => _nextVerseWords;
+  List<ContentData> get previousVerseWords => _previousVerseWords;
+  ({String book, int chapter, int verse})? get nextCoords => _nextCoords;
+  ({String book, int chapter, int verse})? get previousCoords => _previousCoords;
 
   // Setters and Logic
-  void updateSelection(String book, int chapter, int verse) {
+  Future<void> updateSelection(String book, int chapter, int verse) async {
       _selectedBook = book;
       _selectedChapter = chapter;
       _selectedVerse = verse;
-      
+
       // Save to persistence
       settings?.saveLastPosition(book, chapter, verse);
-      
-      loadVerse();
+
+      await loadVerse();
     }
 
   Future<void> loadVerse() async {
     _currentVerseWords = await db.getVerse(_selectedBook, _selectedChapter, _selectedVerse);
+    notifyListeners();
+    await _prefetchNeighborVerses();
+  }
+
+  // Fetches the actual previous/next verse content so a swipe gesture can
+  // display real data throughout the drag instead of a stale copy of the
+  // current verse that only updates once the page snap completes.
+  Future<void> _prefetchNeighborVerses() async {
+    final nextCoords = await _peekNextCoords();
+    final next = nextCoords != null
+        ? await db.getVerse(nextCoords.book, nextCoords.chapter, nextCoords.verse)
+        : <ContentData>[];
+
+    final prevCoords = await _peekPreviousCoords();
+    final previous = prevCoords != null
+        ? await db.getVerse(prevCoords.book, prevCoords.chapter, prevCoords.verse)
+        : <ContentData>[];
+
+    if (_isDisposed) return;
+    _nextVerseWords = next;
+    _previousVerseWords = previous;
+    _nextCoords = nextCoords;
+    _previousCoords = prevCoords;
     notifyListeners();
   }
 
@@ -140,37 +173,32 @@ class BibleProvider extends ChangeNotifier {
   // Helper: Get index of current book
   int get _currentBookIndex => _books.indexOf(_selectedBook);
 
-  // 1. ROBUST NEXT VERSE LOGIC
-  // Update the return type to Future<String?>
-  Future<String?> nextVerse() async {
+  // Computes where "next" points to, without mutating any state.
+  Future<({String book, int chapter, int verse})?> _peekNextCoords() async {
     // 1. Next Verse in same chapter
     if (_selectedVerse < _availableVerses.last) {
-      updateSelection(_selectedBook, _selectedChapter, _selectedVerse + 1);
-      return null; // Success
+      return (book: _selectedBook, chapter: _selectedChapter, verse: _selectedVerse + 1);
     }
 
     // 2. Next Chapter in same book
     if (_selectedChapter < _availableChapters.last) {
-      updateSelection(_selectedBook, _selectedChapter + 1, 1);
-      return null; // Success
+      return (book: _selectedBook, chapter: _selectedChapter + 1, verse: 1);
     }
 
     // 3. Next Book
     if (_currentBookIndex < _books.length - 1) {
-      final nextBook = _books[_currentBookIndex + 1];
-      updateSelection(nextBook, 1, 1);
-      return null; // Success
+      return (book: _books[_currentBookIndex + 1], chapter: 1, verse: 1);
     }
 
     // 4. Boundary Reached
-    return "You have reached the end of the Old Testament.";
+    return null;
   }
 
-  Future<String?> previousVerse() async {
+  // Computes where "previous" points to, without mutating any state.
+  Future<({String book, int chapter, int verse})?> _peekPreviousCoords() async {
     // 1. Previous Verse in same chapter
     if (_selectedVerse > 1) {
-      updateSelection(_selectedBook, _selectedChapter, _selectedVerse - 1);
-      return null; // Success
+      return (book: _selectedBook, chapter: _selectedChapter, verse: _selectedVerse - 1);
     }
 
     // 2. Previous Chapter in same book
@@ -178,88 +206,37 @@ class BibleProvider extends ChangeNotifier {
       final prevChapter = _selectedChapter - 1;
       final prevChapterVerses = await db.getVersesForChapter(_selectedBook, prevChapter);
       final lastVerse = prevChapterVerses.isNotEmpty ? prevChapterVerses.last : 1;
-      
-      updateSelection(_selectedBook, prevChapter, lastVerse);
-      return null; // Success
+      return (book: _selectedBook, chapter: prevChapter, verse: lastVerse);
     }
 
     // 3. Previous Book
     if (_currentBookIndex > 0) {
       final prevBook = _books[_currentBookIndex - 1];
-      
+
       final prevBookChapters = await db.getChaptersForBook(prevBook);
       final lastChapter = prevBookChapters.isNotEmpty ? prevBookChapters.last : 1;
-      
+
       final prevChapterVerses = await db.getVersesForChapter(prevBook, lastChapter);
       final lastVerse = prevChapterVerses.isNotEmpty ? prevChapterVerses.last : 1;
 
-      updateSelection(prevBook, lastChapter, lastVerse);
-      return null; // Success
+      return (book: prevBook, chapter: lastChapter, verse: lastVerse);
     }
 
     // 4. Boundary Reached
-    return "You are at the start of the Book.";
+    return null;
   }
 
-  // Future<void> nextVerse() async {
-  //   // Case A: Next Verse in same chapter
-  //   if (_selectedVerse < _availableVerses.last) {
-  //     updateSelection(_selectedBook, _selectedChapter, _selectedVerse + 1);
-  //     return;
-  //   }
+  Future<String?> nextVerse() async {
+    final coords = await _peekNextCoords();
+    if (coords == null) return "You have reached the end of the Old Testament.";
+    await updateSelection(coords.book, coords.chapter, coords.verse);
+    return null;
+  }
 
-  //   // Case B: Next Chapter in same book
-  //   if (_selectedChapter < _availableChapters.last) {
-  //     // Go to next chapter, Verse 1
-  //     updateSelection(_selectedBook, _selectedChapter + 1, 1);
-  //     return;
-  //   }
-
-  //   // Case C: Next Book
-  //   if (_currentBookIndex < _books.length - 1) {
-  //     final nextBook = _books[_currentBookIndex + 1];
-  //     // Go to Next Book, Chapter 1, Verse 1
-  //     updateSelection(nextBook, 1, 1);
-  //     return;
-  //   }
-
-  //   // Case D: End of Bible (Do nothing or show toast)
-  //   print("End of Old Testament reached.");
-  // }
-
-  // // 2. ROBUST PREVIOUS VERSE LOGIC
-  // Future<void> previousVerse() async {
-  //   // Case A: Previous Verse in same chapter
-  //   if (_selectedVerse > 1) {
-  //     updateSelection(_selectedBook, _selectedChapter, _selectedVerse - 1);
-  //     return;
-  //   }
-
-  //   // Case B: Previous Chapter in same book
-  //   if (_selectedChapter > 1) {
-  //     final prevChapter = _selectedChapter - 1;
-  //     // We need to find the last verse of the previous chapter
-  //     final prevChapterVerses = await db.getVersesForChapter(_selectedBook, prevChapter);
-  //     final lastVerse = prevChapterVerses.isNotEmpty ? prevChapterVerses.last : 1;
-      
-  //     updateSelection(_selectedBook, prevChapter, lastVerse);
-  //     return;
-  //   }
-
-  //   // Case C: Previous Book
-  //   if (_currentBookIndex > 0) {
-  //     final prevBook = _books[_currentBookIndex - 1];
-      
-  //     // Find last chapter of previous book
-  //     final prevBookChapters = await db.getChaptersForBook(prevBook);
-  //     final lastChapter = prevBookChapters.isNotEmpty ? prevBookChapters.last : 1;
-      
-  //     // Find last verse of that last chapter
-  //     final prevChapterVerses = await db.getVersesForChapter(prevBook, lastChapter);
-  //     final lastVerse = prevChapterVerses.isNotEmpty ? prevChapterVerses.last : 1;
-
-  //     updateSelection(prevBook, lastChapter, lastVerse);
-  //     return;
-  //   }
-  // }
+  Future<String?> previousVerse() async {
+    final coords = await _peekPreviousCoords();
+    if (coords == null) return "You are at the start of the Book.";
+    await updateSelection(coords.book, coords.chapter, coords.verse);
+    return null;
+  }
 }
