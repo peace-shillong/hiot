@@ -21,15 +21,17 @@ class _MobileDisplayScreenState extends State<MobileDisplayScreen> {
   // 1. Create Controller
   final ScreenshotController _screenshotController = ScreenshotController();
 
-  // Infinite-loop trick: the PageView always has exactly 3 pages
-  // (previous / current / next). We keep it centered on index 1 and, once a
-  // swipe settles on 0 or 2, commit that verse to BibleProvider and jump
-  // straight back to the center — instead of recreating the controller (and
-  // therefore its scroll position) on every rebuild, which is what caused
-  // the previous verse to linger until the drag was already past the
-  // halfway point and only then snap to the new one.
+  // The PageView always holds exactly 3 pages (previous / current / next) and
+  // stays centered on index 1. Once a swipe settles on 0 or 2 we commit that
+  // verse to BibleProvider and jump straight back to the center, so swiping
+  // never runs out of pages. The controller is created once — rebuilding it
+  // would reset the scroll position mid-gesture.
   late final PageController _pageController;
   static const int _centerPage = 1;
+
+  // jumpToPage and any further scrolling must not start a second commit while
+  // one is still in flight.
+  bool _isCommitting = false;
 
   @override
   void initState() {
@@ -43,25 +45,44 @@ class _MobileDisplayScreenState extends State<MobileDisplayScreen> {
     super.dispose();
   }
 
-  Future<void> _onPageChanged(int index) async {
-    if (index == _centerPage) return;
+  // Driven by scroll-end rather than PageView's onPageChanged, which fires as
+  // soon as the drag crosses the 50% threshold — with the finger still down —
+  // so committing there re-centered the page mid-gesture.
+  bool _onScrollEnd(ScrollEndNotification notification) {
+    // depth 0 is the PageView itself; each pane's vertical scroll view bubbles
+    // up at a greater depth.
+    if (notification.depth != 0) return false;
+    if (_isCommitting) return false;
 
-    final provider = context.read<BibleProvider>();
-    final message = index > _centerPage
-        ? await provider.nextVerse()
-        : await provider.previousVerse();
+    final page = _pageController.page?.round();
+    if (page == null || page == _centerPage) return false;
 
-    if (!mounted) return;
-    _pageController.jumpToPage(_centerPage);
+    _commitPage(page);
+    return false;
+  }
 
-    if (message != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  Future<void> _commitPage(int index) async {
+    _isCommitting = true;
+    try {
+      final provider = context.read<BibleProvider>();
+      final message = index > _centerPage
+          ? await provider.nextVerse()
+          : await provider.previousVerse();
+
+      if (!mounted) return;
+      _pageController.jumpToPage(_centerPage);
+
+      if (message != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      _isCommitting = false;
     }
   }
 
@@ -86,36 +107,38 @@ class _MobileDisplayScreenState extends State<MobileDisplayScreen> {
         // We use a white container background to ensure captured image isn't transparent
         child: Container(
           color: Colors.white,
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: 3,
-            onPageChanged: _onPageChanged,
-            itemBuilder: (context, index) {
-              if (index < _centerPage) {
-                final coords = provider.previousCoords;
+          child: NotificationListener<ScrollEndNotification>(
+            onNotification: _onScrollEnd,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: 3,
+              itemBuilder: (context, index) {
+                if (index < _centerPage) {
+                  final coords = provider.previousCoords;
+                  return VerseDisplayPane(
+                    words: provider.previousVerseWords,
+                    book: coords?.book,
+                    chapter: coords?.chapter,
+                    verse: coords?.verse,
+                  );
+                }
+                if (index > _centerPage) {
+                  final coords = provider.nextCoords;
+                  return VerseDisplayPane(
+                    words: provider.nextVerseWords,
+                    book: coords?.book,
+                    chapter: coords?.chapter,
+                    verse: coords?.verse,
+                  );
+                }
                 return VerseDisplayPane(
-                  words: provider.previousVerseWords,
-                  book: coords?.book,
-                  chapter: coords?.chapter,
-                  verse: coords?.verse,
+                  words: provider.currentVerseWords,
+                  book: provider.selectedBook,
+                  chapter: provider.selectedChapter,
+                  verse: provider.selectedVerse,
                 );
-              }
-              if (index > _centerPage) {
-                final coords = provider.nextCoords;
-                return VerseDisplayPane(
-                  words: provider.nextVerseWords,
-                  book: coords?.book,
-                  chapter: coords?.chapter,
-                  verse: coords?.verse,
-                );
-              }
-              return VerseDisplayPane(
-                words: provider.currentVerseWords,
-                book: provider.selectedBook,
-                chapter: provider.selectedChapter,
-                verse: provider.selectedVerse,
-              );
-            },
+              },
+            ),
           ),
         ),
       ),

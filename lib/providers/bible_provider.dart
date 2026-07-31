@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hiot/providers/settings_provider.dart';
 import '../data/database.dart';
@@ -143,29 +145,32 @@ class BibleProvider extends ChangeNotifier {
   Future<void> loadVerse() async {
     _currentVerseWords = await db.getVerse(_selectedBook, _selectedChapter, _selectedVerse);
     notifyListeners();
-    await _prefetchNeighborVerses();
+    // Not awaited: the swipe handler re-centers as soon as the current verse
+    // is ready. Awaiting this delayed that until next/previous had already
+    // shifted to the new verse, flashing wrong content on the visible page.
+    unawaited(_prefetchNeighborVerses());
   }
 
   // Fetches the actual previous/next verse content so a swipe gesture can
   // display real data throughout the drag instead of a stale copy of the
   // current verse that only updates once the page snap completes.
   Future<void> _prefetchNeighborVerses() async {
-    final nextCoords = await _peekNextCoords();
-    final next = nextCoords != null
-        ? await db.getVerse(nextCoords.book, nextCoords.chapter, nextCoords.verse)
-        : <ContentData>[];
-
-    final prevCoords = await _peekPreviousCoords();
-    final previous = prevCoords != null
-        ? await db.getVerse(prevCoords.book, prevCoords.chapter, prevCoords.verse)
-        : <ContentData>[];
+    // Both directions are independent, so resolve them concurrently.
+    final coords = await Future.wait([_peekNextCoords(), _peekPreviousCoords()]);
+    final words = await Future.wait(coords.map(_wordsAt));
 
     if (_isDisposed) return;
-    _nextVerseWords = next;
-    _previousVerseWords = previous;
-    _nextCoords = nextCoords;
-    _previousCoords = prevCoords;
+    _nextCoords = coords[0];
+    _previousCoords = coords[1];
+    _nextVerseWords = words[0];
+    _previousVerseWords = words[1];
     notifyListeners();
+  }
+
+  Future<List<ContentData>> _wordsAt(
+      ({String book, int chapter, int verse})? coords) async {
+    if (coords == null) return const [];
+    return db.getVerse(coords.book, coords.chapter, coords.verse);
   }
 
   // Inside BibleProvider class
