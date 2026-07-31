@@ -21,6 +21,71 @@ class _MobileDisplayScreenState extends State<MobileDisplayScreen> {
   // 1. Create Controller
   final ScreenshotController _screenshotController = ScreenshotController();
 
+  // The PageView always holds exactly 3 pages (previous / current / next) and
+  // stays centered on index 1. Once a swipe settles on 0 or 2 we commit that
+  // verse to BibleProvider and jump straight back to the center, so swiping
+  // never runs out of pages. The controller is created once — rebuilding it
+  // would reset the scroll position mid-gesture.
+  late final PageController _pageController;
+  static const int _centerPage = 1;
+
+  // jumpToPage and any further scrolling must not start a second commit while
+  // one is still in flight.
+  bool _isCommitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _centerPage);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  // Driven by scroll-end rather than PageView's onPageChanged, which fires as
+  // soon as the drag crosses the 50% threshold — with the finger still down —
+  // so committing there re-centered the page mid-gesture.
+  bool _onScrollEnd(ScrollEndNotification notification) {
+    // depth 0 is the PageView itself; each pane's vertical scroll view bubbles
+    // up at a greater depth.
+    if (notification.depth != 0) return false;
+    if (_isCommitting) return false;
+
+    final page = _pageController.page?.round();
+    if (page == null || page == _centerPage) return false;
+
+    _commitPage(page);
+    return false;
+  }
+
+  Future<void> _commitPage(int index) async {
+    _isCommitting = true;
+    try {
+      final provider = context.read<BibleProvider>();
+      final message = index > _centerPage
+          ? await provider.nextVerse()
+          : await provider.previousVerse();
+
+      if (!mounted) return;
+      _pageController.jumpToPage(_centerPage);
+
+      if (message != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      _isCommitting = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<BibleProvider>();
@@ -32,7 +97,7 @@ class _MobileDisplayScreenState extends State<MobileDisplayScreen> {
           IconButton(
             icon: const Icon(Icons.share),
             // 2. Attach Share Logic
-            onPressed: _shareImage, 
+            onPressed: _shareImage,
           )
         ],
       ),
@@ -41,39 +106,39 @@ class _MobileDisplayScreenState extends State<MobileDisplayScreen> {
         controller: _screenshotController,
         // We use a white container background to ensure captured image isn't transparent
         child: Container(
-          color: Colors.white, 
-          child: PageView.builder(
-            controller: PageController(initialPage: provider.selectedVerse),
-            // Inside build() -> PageView.builder -> onPageChanged:
-
-            onPageChanged: (index) async {
-              final provider = context.read<BibleProvider>();
-              String? message;
-
-              if (index > provider.selectedVerse) {
-                message = await provider.nextVerse();
-              } else {
-                message = await provider.previousVerse();
-              }
-
-              // If a message was returned, show it and force the page back
-              if (message != null && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(message),
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                  ),
+          color: Colors.white,
+          child: NotificationListener<ScrollEndNotification>(
+            onNotification: _onScrollEnd,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: 3,
+              itemBuilder: (context, index) {
+                if (index < _centerPage) {
+                  final coords = provider.previousCoords;
+                  return VerseDisplayPane(
+                    words: provider.previousVerseWords,
+                    book: coords?.book,
+                    chapter: coords?.chapter,
+                    verse: coords?.verse,
+                  );
+                }
+                if (index > _centerPage) {
+                  final coords = provider.nextCoords;
+                  return VerseDisplayPane(
+                    words: provider.nextVerseWords,
+                    book: coords?.book,
+                    chapter: coords?.chapter,
+                    verse: coords?.verse,
+                  );
+                }
+                return VerseDisplayPane(
+                  words: provider.currentVerseWords,
+                  book: provider.selectedBook,
+                  chapter: provider.selectedChapter,
+                  verse: provider.selectedVerse,
                 );
-                // Important: If we hit the wall, the PageView might have visually slid 
-                // to a "blank" next page. We need to force it back to the current verse.
-                // (However, since we are rebuilding the widget with the SAME verse, 
-                // Flutter usually handles the snap back automatically).
-              }
-            },
-            itemBuilder: (context, index) {
-              return const VerseDisplayPane();
-            },
+              },
+            ),
           ),
         ),
       ),

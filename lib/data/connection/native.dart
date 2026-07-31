@@ -41,6 +41,6 @@ QueryExecutor connect() {
       }
     }
     
-    return NativeDatabase(file);
+    return NativeDatabase.createInBackground(file);
   });
 }
